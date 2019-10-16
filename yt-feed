@@ -1,0 +1,343 @@
+#!/bin/bash
+###########################
+#i=JPPGmbH;
+############ FARBEN ######
+BLACK=$(tput setaf 0);
+RED=$(tput setaf 1);
+GREEN=$(tput setaf 2);
+YELLOW=$(tput setaf 3);
+LIME_YELLOW=$(tput setaf 11);
+POWDER_BLUE=$(tput setaf 12);
+BLUE=$(tput setaf 4);
+MAGENTA=$(tput setaf 5);
+CYAN=$(tput setaf 6);
+WHITE=$(tput setaf 15);
+BRIGHT=$(tput bold);
+NORMAL=$(tput sgr0);
+BLINK=$(tput blink);
+REVERSE=$(tput smso);
+UNDERLINE=$(tput smul);
+##########################
+############ Pfade #######
+pfadConfig="/home/and/.config/yt-feed";
+pfadProcess="/home/and/.local/share/yt-feed";
+
+channel=($(cat "${pfadConfig}/channels.ini"));
+user=($(cat "${pfadConfig}/users.ini"));
+declare -a aliases="($(<"${pfadConfig}/usersalias.ini") $(<"${pfadConfig}/channelsalias.ini"))"; 
+#aliases=($(cat "${pfadConfig}/usersalias.ini") $(cat "${pfadConfig}/channelsalias.ini")); 
+
+shMo=0;
+
+##########################
+
+function headerMenu () {
+	clear;
+	echo "${RED}######################################################################################${NORMAL}";
+	echo "${RED}######################################${NORMAL}${BRIGHT} YT-FEED ${NORMAL}${RED}######################################${NORMAL}";
+	printf "${RED}####################################################################################${NORMAL}\n\n";
+}
+
+function devBar () {
+	printf "___________________________________________________________________________________\n\n";
+}
+
+function updateChannels () {
+	channel=($(cat "${pfadConfig}/channels.ini"));
+	user=($(cat "${pfadConfig}/users.ini"));
+	headerMenu;
+	printf "${UNDERLINE}Updating Channels:${NORMAL}\n";
+	devBar;
+	###### USER ################################
+	for i in "${user[@]}"; do
+		echo "Checking: ${i} ........";
+		wget -q "https://www.youtube.com/user/$i/videos" -O ${pfadProcess}/$i;
+		echo "Processing: $i ......";
+		cat ${pfadProcess}/${i} | grep yt-lockup-title | sed 's/.*dir="ltr"\ //; s/aria-describedby.*" href/link/; s/\ rel.*/\ flllg="0"/' > ${pfadProcess}/${i}-newlist;
+		rm ${pfadProcess}/${i};
+
+		### check if archive exists
+		if [ ! -f ${pfadProcess}/$i-archive ]; then
+			echo ".. building archive ..";	
+			cp ${pfadProcess}/${i}-newlist "${pfadProcess}/${i}-archive";
+			sed 's/flllg="0"/flllg="1"/' -i "${pfadProcess}/${i}-archive";
+		fi
+
+		### compare first lines
+		local firstOldline="$(head -n1 ${pfadProcess}/${i}-archive | sed 's/.*link="\/w//; s/".*//')"; 
+		local firstNewline="$(head -n1 ${pfadProcess}/${i}-newlist | sed 's/.*link="\/w//; s/".*//')";	
+		
+		if [ "${firstNewline}" = "${firstOldline}" ]; then
+			echo "... ${YELLOW}$i is up to date!${NORMAL}";
+		else
+			sed -n "/${firstOldline}/q;p" ${pfadProcess}/$i-newlist > ${pfadProcess}/${i}-newelements;
+		        sed "s,flllg=\"0\",flllg=\"1\"," -i ${pfadProcess}/$i-newelements;
+			sed -r '/^\s*$/d' -i ${pfadProcess}/$i-newelements;
+
+			mv ${pfadProcess}/$i-archive ${pfadProcess}/$i-archive.bck;
+			cat ${pfadProcess}/$i-newelements ${pfadProcess}/$i-archive.bck > ${pfadProcess}/$i-archive;
+			rm ${pfadProcess}/${i}-newelements;
+			rm ${pfadProcess}/${i}-newlist;
+			echo " ... ${GREEN}$i updated!${NORMAL}";
+		fi
+	done		
+
+	###### CHANNEL ################################
+	for i in "${channel[@]}"; do
+		echo "Checking: ${i} ......"; 
+		wget -q "https://www.youtube.com/channel/$i/videos" -O ${pfadProcess}/$i;
+		echo "Processing: $i ....";
+		cat ${pfadProcess}/${i} | grep yt-lockup-title | sed 's/.*dir="ltr"\ //; s/aria-describedby.*" href/link/; s/\ rel.*/\ flllg="0"/' > ${pfadProcess}/${i}-newlist;
+		rm ${pfadProcess}/${i};
+		
+		### check if archive exists
+		if [ ! -f ${pfadProcess}/$i-archive ]; then
+			cp ${pfadProcess}/${i}-newlist ${pfadProcess}/${i}-archive;
+			sed 's/flllg="0"/flllg="1"/' -i ${pfadProcess}/$i-archive;
+		fi
+
+		### compare first lines
+		local firstOldline="$(head -n1 ${pfadProcess}/${i}-archive | sed 's/.*link="\/w//; s/".*//')"; 
+		local firstNewline="$(head -n1 ${pfadProcess}/${i}-newlist | sed 's/.*link="\/w//; s/".*//')";	
+		
+		if [ "${firstNewline}" = "${firstOldline}" ]; then
+			echo " ...${YELLOW}$i is up to date!${NORMAL}";
+		else
+			sed -n "/${firstOldline}/q;p" ${pfadProcess}/$i-newlist > ${pfadProcess}/${i}-newelements;
+		        sed "s,flllg=\"0\",flllg=\"1\"," -i ${pfadProcess}/$i-newelements;
+			sed -r '/^\s*$/d' -i ${pfadProcess}/$i-newelements;
+
+			mv ${pfadProcess}/$i-archive ${pfadProcess}/$i-archive.bck;
+			cat ${pfadProcess}/$i-newelements ${pfadProcess}/$i-archive.bck > ${pfadProcess}/$i-archive;
+			rm ${pfadProcess}/${i}-newelements;
+			rm ${pfadProcess}/${i}-newlist;
+			echo " ... ${GREEN}$i updated!${NORMAL}";
+		fi
+	done	
+}
+
+function addUser () {
+	headerMenu;
+	printf "${UNDERLINE}Adding User or Channel:${NORMAL}\n";
+	devBar;
+	printf "If you want to add an User, press '${BLUE}u${NORMAL}'.\nIf you want to add a Channel, press '${BLUE}c${NORMAL}'.\nTo abort now, press '${BLUE}q${NORMAL}'.\n\n";
+	printf ">> ";
+	while read -n 1 addu; do
+		if [ "$addu" = "u" ]; then
+			printf "\nAdding ${GREEN}user${NORMAL}!\n\nPlease enter the name of the User: ";
+			while read nameu; do
+				sed "1s/$/ ${nameu}/" -i ${pfadConfig}/users.ini;
+				#printf "'${nameu}'" >> ${pfadConfig}/users.ini;
+				printf "\n${GREEN}${nameu}${NORMAL} added!\n\nDo you want to set an alias? (${BLUE}y${NORMAL}/${BLUE}n${NORMAL}): "; 
+				while read -n 1 adda; do
+					if [ "$adda" = "y" ]; then
+						printf "\nAdding ${GREEN}alias${NORMAL}!\n\nPlease enter the name of the alias: ";
+						while read namea; do
+							sed "1s/$/ '${namea}'/" -i ${pfadConfig}/usersalias.ini;
+							#printf "'${namea}'" >> ${pfadConfig}/usersalias.ini;
+							printf "\n\n${GREEN}${namea}${NORMAL} added!\n";
+							break;
+						done
+					else
+							sed "1s/$/ '${nameu}'/" -i ${pfadConfig}/usersalias.ini;
+							#printf "'${nameu}'" >> ${pfadConfig}/usersalias.ini;
+					fi
+					break;
+				done
+				break;
+			done
+			return 2;
+			break;
+		elif [ "$addu" = "c" ]; then
+			printf "\nAdding ${BLUE}channel${NORMAL}!\n\nPlease enter the name of the channel: ";
+			while read nameu; do
+				sed "1s/$/ ${nameu}/" -i ${pfadConfig}/channels.ini;
+				#printf "'${nameu}'" >> ${pfadConfig}/channels.ini;
+				printf "\n\n${GREEN}${nameu}${NORMAL} added!\n\nDo you want to set an alias? (${BLUE}y${NORMAL}/${BLUE}n${NORMAL}): "; 
+				while read -n 1 adda; do
+					if [ "$adda" = "y" ]; then
+						printf "\nAdding ${GREEN}alias${NORMAL}!\n\nPlease enter the name of the alias: ";
+						while read namea; do
+							sed "1s/$/ '${namea}'/" -i ${pfadConfig}/channelsalias.ini;	
+						#	printf "'${namea}'" >> ${pfadConfig}/channelsalias.ini;
+							printf "\n\n${GREEN}${namea}${NORMAL} added!\n";
+							break;
+						done
+					else
+						sed "1s/$/ '${nameu}'/" -i ${pfadConfig}/channelsalias.ini;		
+						#printf "'${nameu}'" >> ${pfadConfig}/channelsalias.ini;
+					fi
+					break;
+				done
+				break;
+			done
+			return 2;
+			break;
+		elif [ "$addu" = "q" ]; then
+			return 2;
+			break;	
+		else
+			printf "\n${RED}Sorry${NORMAL}, ${LIME_YELLOW}$addu${NORMAL} is not a valid option!\nChoose again: ";
+		fi
+	done
+}
+
+
+function executeVideo () {
+	exec st echo "starting video..." | mpv --ytdl-format="bestvideo[ext=mp4][height<=?1080]+bestaudio[ext=m4a]" https://www.youtube.com$1;
+}
+
+function listOptions () {
+	optionss=( "$@" );
+	options=("${optionss[@]:1}");
+	opt=$1;
+	alia="${aliases[$opt]}";
+	local brrrLoop=0;
+	while [ $brrrLoop -lt 5 ]; do	
+		headerMenu;
+		local lncnt=$(( 0 + 25*${shMo} ));
+		local shMoN=$((${shMo}*25 + 1));
+		#local shMoNend=$(${shMoN} + 24);
+		printf "${UNDERLINE}${GREEN}${alia}${NORMAL}${UNDERLINE}'s videos:${NORMAL}\n";
+		devBar;
+	#	for i in $(seq 1 10); do
+			while read line; do
+				lncnt=$(( $lncnt + 1 ));	
+				if [[ $lncnt -lt 10 ]]; then
+					lncntp=" $lncnt";
+				else
+					lncntp=$lncnt;
+				fi
+				if [[ $line = *"flllg=\"0\""* ]]; then
+					local title=$(printf "$line\n" | cut -d'"' -f 2);
+					printf "${BLUE}${lncntp}${NORMAL}:) $title\n";
+				else
+					local title=$(printf "$line\n" | cut -d'"' -f 2);
+					printf "${BLUE}${lncntp}${NORMAL}:) ${BRIGHT}${YELLOW}$title${NORMAL}\n";
+				fi
+			done < <(sed -n "${shMoN},+24p" ${pfadProcess}/${options[$opt]}-archive)
+			#done < <(head -n ${shMoN} ${pfadProcess}/${options[$opt]}-archive | tail -n 25)
+			#done < <(cat ${pfadProcess}/${options[$opt]}-archive | sed "${shMoN}s/.*$//; ${shMoNend}s/$.*//" )
+			#done < <(head -n 25 ${pfadProcess}/${options[$opt]}-archive)
+	#	done		
+		devBar;
+		printf "Press '${BLUE}m${NORMAL}' to show older videos. \n";
+		printf "Press '${BLUE}q${NORMAL}' to go back to feed list. \n";
+		devBar;
+		printf "Choose a video: ";
+		while read -n 4 chs 
+		do
+			if [ "$chs" = "q" ]; then
+				printf "\nBack to main menu.... \n";
+				return 5;
+				break;
+			elif [ "${chs}" = "m" ]; then
+				local shMo=$((${shMo} + 1));
+				break;
+			elif ! [[ $chs =~ ^[0-9]+$ ]]; then
+				printf "\n${RED}Sorry${NORMAL}, ${LIME_YELLOW}$chs${NORMAL} is not an integer! \nChoose again: ";
+			elif [ "$chs" -gt ${lncnt} ]; then  #$((  ${#options[@]}-1 )) ]; then
+				printf "\n${RED}Sorry${NORMAL}, ${LIME_YELLOW}$chs${NORMAL} exceeds the number of options! \nChoose again: ";
+			else
+				local linevid=$( cat ${pfadProcess}/${options[$opt]}-archive | sed "${chs}q;d");
+		       		local linkvid=$( echo "$linevid" | sed 's/.*link="//; s/".*//' );
+				executeVideo $linkvid; 
+				local flgvid=$( echo "$linevid" | sed 's/.*flllg="//; s/".*//' );	
+				if [[ "$flgvid" = "1" ]]; then
+					sed "${chs}s/flllg=\"1/flllg=\"0/" -i ${pfadProcess}/${options[$opt]}-archive;
+					#sed "s/.*link=\"${linkvid}\"\ flllg=\"1/.*link=\"${linkvid}\"\ flllg=\"0/" -i ${pfadProcess}/${options[$opt]}-archive;
+				fi
+				break;
+			fi
+		done
+		brrrLoop=$?;
+	done
+	return 5;
+}
+
+function feedMenu () {
+	headerMenu;
+	printf "${BRIGHT}${UNDERLINE}Main Menu${NORMAL}\n";	
+	devBar;
+
+	options=( "$@" );   #options=(${user[@]} ${channel[@]});
+	for i in "${!options[@]}"; do
+		#local alia="${aliases[$i]}";
+		local STRold=`cat ${pfadProcess}/${options[$i]}-archive | head -n 1 | grep flllg=\"1\"`;
+		local STRvgl=`cat ${pfadProcess}/${options[$i]}-archive | head -n 1 | grep flllg=\"2\"`;
+		if [ "${STRold}" = "${STRvgl}" ]; then
+			printf "${BLUE}$i${NORMAL}:) ${BRIGHT}${aliases[$i]}${NORMAL}\n";
+			#printf "${BLUE}$i${NORMAL}:) ${BRIGHT}${options[$i]}${NORMAL}\n";
+		else
+			printf "${BLUE}$i${NORMAL}:) ${YELLOW}${BRIGHT}${aliases[$i]}${NORMAL}\n";
+			#printf "${BLUE}$i${NORMAL}:) ${YELLOW}${BRIGHT}${options[$i]}${NORMAL}\n";
+		fi
+	done
+	devBar;
+	printf "Press '${BLUE}a${NORMAL}' to add a user/channel. \n";
+	printf "Press '${BLUE}q${NORMAL}' to quit the program. \n";
+	devBar;
+	#footerMenu;
+	printf "Choose a feed: ";
+	while read -n 2 opt
+	do
+		if [ "$opt" = "q" ]; then
+			printf "\nQuitting program.... \n";
+			return 8;
+			break;
+		elif [ "$opt" = "a" ]; then
+			local brrLoop=0;
+			while [ $brrLoop -lt 2 ]; do
+				addUser;
+				brrLoop=$?;
+			done
+			updateChannels;
+			devBar;
+			printf "\n${BRIGHT}${RED}You need to ${NORMAL}${BRIGHT}restart${RED} the program!${NORMAL}\n";
+			devBar;printf "\n";
+			return 8;
+			break;
+		elif ! [[ $opt =~ ^[0-9]+$ ]]; then
+			printf "\n${RED}Sorry${NORMAL}, ${LIME_YELLOW}$opt${NORMAL} is not an integer! \nChoose again: ";
+		elif [ "$opt" -gt $((  ${#options[@]}-1 )) ]; then
+			printf "\n${RED}Sorry${NORMAL}, ${LIME_YELLOW}$opt${NORMAL} exceeds the number of options! \nChoose again: ";
+		else
+			local brLoop=0;
+			while [ $brLoop -lt 5 ]; do 	
+				listOptions "$opt" "${options[@]}";
+				brLoop=$?;
+			done
+			break;
+		fi
+	done
+}
+
+function mainMenu () {
+	options=( "$@" );
+	local brLop=0;
+	while [ $brLop -lt 8 ]; do
+		feedMenu "${options[@]}";
+		brLop=$?;
+	done
+}
+	
+####################################
+###### Programmstruktur ############
+####################################
+# program start 
+headerMenu;
+printf "Do you want to update your feeds now?\n\n";
+read -p "Update your feeds ${BLUE}(y/n)${NORMAL}?  " choice
+case "$choice" in 
+	y|Y ) echo "Updating Channels:\n"; updateChannels;;
+    	n|N ) echo "Proceeding to Menu ...\n";;
+      	* ) echo "${RED}Sorry${NORMAL}, invalid answer. Choose again!\n";continue;;
+esac
+
+# Get channel info: 
+getChanneldata;
+options=(${user[@]} ${channel[@]});
+
+#### MAIN MENU
+mainMenu "${options[@]}";
+
