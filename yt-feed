@@ -50,15 +50,15 @@ function updateChannels () {
 	devBar;
 	###### USER ################################
 	for i in "${user[@]}"; do
-		echo "Checking: ${i} ........";
+		echo "# Checking: ${i} ........ #";
 		wget -q "https://www.youtube.com/user/$i/videos" -O ${pfadProcess}/$i;
-		echo "Processing: $i ......";
+		echo "# Processing: $i ...... #";
 		cat ${pfadProcess}/${i} | grep yt-lockup-title | sed 's/.*dir="ltr"\ //; s/aria-describedby.*" href/link/; s/\ rel.*/\ flllg="0"/' > ${pfadProcess}/${i}-newlist;
 		rm ${pfadProcess}/${i};
 
 		### check if archive exists
 		if [ ! -f ${pfadProcess}/$i-archive ]; then
-			echo ".. building archive ..";	
+			echo "# .. building archive .. #";	
 			cp ${pfadProcess}/${i}-newlist "${pfadProcess}/${i}-archive";
 			sed 's/flllg="0"/flllg="1"/' -i "${pfadProcess}/${i}-archive";
 		fi
@@ -68,7 +68,7 @@ function updateChannels () {
 		local firstNewline="$(head -n1 ${pfadProcess}/${i}-newlist | sed 's/.*link="\/w//; s/".*//')";	
 		
 		if [ "${firstNewline}" = "${firstOldline}" ]; then
-			echo "... ${YELLOW}$i is up to date!${NORMAL}";
+			echo "# ... ${YELLOW}$i is up to date!${NORMAL} #";
 		else
 			sed -n "/${firstOldline}/q;p" ${pfadProcess}/$i-newlist > ${pfadProcess}/${i}-newelements;
 		        sed "s,flllg=\"0\",flllg=\"1\"," -i ${pfadProcess}/$i-newelements;
@@ -78,15 +78,15 @@ function updateChannels () {
 			cat ${pfadProcess}/$i-newelements ${pfadProcess}/$i-archive.bck > ${pfadProcess}/$i-archive;
 			rm ${pfadProcess}/${i}-newelements;
 			rm ${pfadProcess}/${i}-newlist;
-			echo " ... ${GREEN}$i updated!${NORMAL}";
+			echo "# ... ${GREEN}$i updated!${NORMAL}...... #";
 		fi
 	done		
 
 	###### CHANNEL ################################
 	for i in "${channel[@]}"; do
-		echo "Checking: ${i} ......"; 
+		echo "# Checking: ${i} ...... #"; 
 		wget -q "https://www.youtube.com/channel/$i/videos" -O ${pfadProcess}/$i;
-		echo "Processing: $i ....";
+		echo "# Processing: $i ...... #";
 		cat ${pfadProcess}/${i} | grep yt-lockup-title | sed 's/.*dir="ltr"\ //; s/aria-describedby.*" href/link/; s/\ rel.*/\ flllg="0"/' > ${pfadProcess}/${i}-newlist;
 		rm ${pfadProcess}/${i};
 		
@@ -101,7 +101,7 @@ function updateChannels () {
 		local firstNewline="$(head -n1 ${pfadProcess}/${i}-newlist | sed 's/.*link="\/w//; s/".*//')";	
 		
 		if [ "${firstNewline}" = "${firstOldline}" ]; then
-			echo " ...${YELLOW}$i is up to date!${NORMAL}";
+			echo "# ....${YELLOW}$i is up to date!${NORMAL} #";
 		else
 			sed -n "/${firstOldline}/q;p" ${pfadProcess}/$i-newlist > ${pfadProcess}/${i}-newelements;
 		        sed "s,flllg=\"0\",flllg=\"1\"," -i ${pfadProcess}/$i-newelements;
@@ -111,7 +111,7 @@ function updateChannels () {
 			cat ${pfadProcess}/$i-newelements ${pfadProcess}/$i-archive.bck > ${pfadProcess}/$i-archive;
 			rm ${pfadProcess}/${i}-newelements;
 			rm ${pfadProcess}/${i}-newlist;
-			echo " ... ${GREEN}$i updated!${NORMAL}";
+			echo "# ...${GREEN}$i updated!${NORMAL}....... #";
 		fi
 	done	
 }
@@ -187,6 +187,10 @@ function executeVideo () {
 	exec st echo "starting video..." | mpv --ytdl-format="bestvideo[ext=mp4][height<=?1080]+bestaudio[ext=m4a]" https://www.youtube.com$1;
 }
 
+function executeLowVideo () {
+	exec st echo "starting video..." | mpv --ytdl-format="bestvideo[ext=mp4][height<=?720]+bestaudio[ext=m4a]" https://www.youtube.com$1;
+}
+
 function listOptions () {
 	optionss=( "$@" );
 	options=("${optionss[@]:1}");
@@ -234,6 +238,22 @@ function listOptions () {
 			elif [ "${chs}" = "m" ]; then
 				local shMo=$((${shMo} + 1));
 				break;
+			elif [[ $chs =~ ^[s] ]]; then
+				local lwchs=$( echo "$chs" | sed 's/.*s//' );
+				if ! [[ $lwchs =~ ^[0-9]+$ ]]; then
+					printf "\n${RED}Sorry${NORMAL}, ${LIME_YELLOW}$lwchs${NORMAL} is not an integer! \nChoose again: ";
+				elif [ "$lwchs" -gt ${lncnt} ]; then  #$((  ${#options[@]}-1 )) ]; then
+					printf "\n${RED}Sorry${NORMAL}, ${LIME_YELLOW}$lwchs${NORMAL} exceeds the number of options! \nChoose again: ";
+				else
+					local linevid=$( cat ${pfadProcess}/${options[$opt]}-archive | sed "${lwchs}q;d");
+					local linkvid=$( echo "$linevid" | sed 's/.*link="//; s/".*//' );
+					executeLowVideo $linkvid; 
+					local flgvid=$( echo "$linevid" | sed 's/.*flllg="//; s/".*//' );	
+					if [[ "$flgvid" = "1" ]]; then
+						sed "${lwchs}s/flllg=\"1/flllg=\"0/" -i ${pfadProcess}/${options[$opt]}-archive;
+					fi
+					break;
+				fi
 			elif ! [[ $chs =~ ^[0-9]+$ ]]; then
 				printf "\n${RED}Sorry${NORMAL}, ${LIME_YELLOW}$chs${NORMAL} is not an integer! \nChoose again: ";
 			elif [ "$chs" -gt ${lncnt} ]; then  #$((  ${#options[@]}-1 )) ]; then
